@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Radar IoT ESP - Vista Unificada y Responsive</title>
+    <title>Radar IoT ESP - Vista Adaptable Unificada</title>
     <style>
-        /* CSS: Prevenir overflow y centrar el contenido, respetando áreas seguras de móviles */
+        /* CSS: Prevenir overflow, centrar, respetar áreas seguras y altura dinámica */
         body {
             background-color: #000;
             color: #0f0;
@@ -14,11 +14,10 @@
             flex-direction: column;
             align-items: center;
             margin: 0;
-            /* Añade padding seguro para iPhone y otros modernos */
             padding: calc(15px + env(safe-area-inset-top)) 15px calc(15px + env(safe-area-inset-bottom)) 15px;
             box-sizing: border-box;
             overflow: hidden; /* Previene scroll accidental */
-            height: 100dvh; /* Usar altura dinámica para ajustarse a barras de navegador */
+            height: 100dvh; /* Altura dinámica para barras de navegador móviles */
         }
         
         h1 {
@@ -27,15 +26,15 @@
             margin-bottom: 20px;
         }
 
-        /* Contenedor que ocupa el espacio disponible */
+        /* Contenedor flexible que ocupa el espacio disponible */
         #canvas-container {
             width: 100%;
-            max-width: 800px; /* Tamaño máximo en PC */
+            max-width: 1000px; /* Tamaño máximo para PC */
             flex-grow: 1; /* Ocupa el resto del espacio vertical */
             display: flex;
             justify-content: center;
             align-items: center;
-            background-color: #000; /* Coincide con canvas para una vista unificada */
+            background-color: #000;
         }
 
         canvas {
@@ -43,6 +42,10 @@
             border-radius: 10px;
             box-shadow: 0 0 20px rgba(0, 255, 0, 0.2);
             background-color: #000;
+            /* Asegura que el canvas se estire si su resolución es menor */
+            width: 100%; 
+            height: 100%;
+            object-fit: contain; /* Mantiene proporciones sin cortar */
         }
     </style>
 </head>
@@ -62,37 +65,57 @@
         // Variables dinámicas para el renderizado
         let centerX, centerY, maxRadius;
         const maxDistance = 40; 
+        const textZoneH = 80; // Altura fija para la zona de texto estable
 
         let currentAngle = 90;
         let currentDistance = 0;
 
-        // --- SISTEMA RESPONSIVE INTEGRADO ---
+        // --- SISTEMA RESPONSIVE ADAPTABLE ---
         function resizeCanvas() {
-            // El canvas toma el ancho de su contenedor
+            // El canvas toma el ancho y alto completo de su contenedor
             canvas.width = container.clientWidth;
-            
-            // Calculamos una altura que cubra el radar semicircular Y el texto
-            // El radar es medio círculo, así que su altura es el radio.
-            const radarSpaceH = canvas.width / 2;
-            // Añadimos 80px extra para el texto y márgenes seguros
-            canvas.height = radarSpaceH + 80; 
+            canvas.height = container.clientHeight;
 
-            // Recalcular el centro y el radio basados en la nueva resolución del canvas entero
-            centerX = canvas.width / 2;
-            centerY = canvas.height - 70; // El origen se mueve hacia arriba para dar espacio al texto abajo
-            maxRadius = canvas.width / 2 - 20; // -20px de margen lateral
+            // Detectar orientación
+            const isLandscape = canvas.width > canvas.height;
+
+            if (isLandscape) {
+                // Modo Horizontal: Radar a un lado, texto al otro? No, integrada vista semicircular es mejor.
+                // Scalaremos por altura para que quepa todo el semicírculo y texto.
+                const usableH = canvas.height - textZoneH - 40; // Espacio seguro
+                maxRadius = Math.min(canvas.width / 2 - 20, usableH); // El radio que quepa en ambos
+                centerX = canvas.width / 2;
+                centerY = usableH + 20; // El origen se mueve hacia abajo para dar espacio al texto abajo
+            } else {
+                // Modo Vertical: Layout stacked (original)
+                // Usamos una proporción (aspect ratio) de 2:1 para el semicírculo
+                const radarSpaceH = canvas.width / 2;
+                maxRadius = canvas.width / 2 - 20;
+                centerX = canvas.width / 2;
+                centerY = radarSpaceH + 20; 
+            }
         }
 
         // Ejecutar al cargar y cada vez que se gire o cambie el tamaño de la pantalla
         window.addEventListener('resize', resizeCanvas);
         resizeCanvas(); 
 
-        // --- MOTOR DE RENDERIZADO ---
+        // --- MOTOR DE RENDERIZADO MEJORADO (No Texto Ghosting) ---
         function drawRadar() {
-            // Efecto de rastro de fósforo (desvanecimiento)
+            // PASO 1: Efecto de rastro de fósforo (desvanecimiento) SOLO EN LA ZONA DEL RADAR
             ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.beginPath();
+            // Creamos un semicírculo sobre el área del radar
+            ctx.arc(centerX, centerY, maxRadius, Math.PI, 0);
+            ctx.fill();
 
+            // PASO 2: LIMPIEZA TOTAL DE LA ZONA DE TEXTO (Previene ghosting y acumulación)
+            // Calculamos el área de texto segura (abajo)
+            const labelY = canvas.height - textZoneH;
+            ctx.fillStyle = '#000'; // Negro absoluto
+            ctx.fillRect(0, labelY, canvas.width, textZoneH); // Limpiar un rectángulo seguro
+
+            // PASO 3: DIBUJAR ELEMENTOS DINÁMICOS DEL RADAR
             drawGrid();
             drawScanner(currentAngle);
 
@@ -100,7 +123,7 @@
                 drawObject(currentAngle, currentDistance);
             }
 
-            // --- NUEVO: Dibujar el texto de estado DENTRO del canvas ---
+            // PASO 4: DIBUJAR TEXTO ESTÁTICO DENTRO DE LA ZONA LIMPIA
             drawStatusText();
 
             // Loop de animación
@@ -151,7 +174,7 @@
             ctx.fill();
         }
 
-        // --- NUEVA FUNCIÓN: Dibujar el texto de estado DENTRO del canvas ---
+        // --- NUEVA FUNCIÓN: Dibujar el texto de estado ESTÁTICO Y CLARO DENTRO del canvas ---
         function drawStatusText() {
             const status = currentDistance > maxDistance ? "Fuera de rango" : `${currentDistance} cm`;
             const text = `Ángulo: ${currentAngle}° | Distancia: ${status}`;
@@ -160,10 +183,11 @@
             // Usamos una fuente en negrita y monospace, similar a la imagen
             ctx.font = 'bold 1.2rem monospace'; 
             ctx.textAlign = 'center';
-            ctx.textBaseline = 'bottom';
+            ctx.textBaseline = 'middle'; // Centrado vertical en la zona
             
-            // Dibujar en el fondo del canvas, con un pequeño margen seguro de 10px
-            ctx.fillText(text, centerX, canvas.height - 10); 
+            // Dibujar en el centro de la zona de texto segura, en negro absoluto
+            const labelCenterY = canvas.height - textZoneH / 2;
+            ctx.fillText(text, centerX, labelCenterY); 
         }
 
         // --- SIMULACIÓN (Borrar al usar WebSocket real) ---
@@ -174,7 +198,6 @@
                 if (currentAngle >= 165 || currentAngle <= 15) direction *= -1;
                 
                 currentDistance = (Math.random() > 0.8) ? Math.floor(Math.random() * 50) : currentDistance;
-                // No se necesita updateUI() externo
             }, 50);
         }
 
