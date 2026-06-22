@@ -2,9 +2,10 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Radar IoT ESP</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Radar IoT ESP - Responsive</title>
     <style>
+        /* CSS: Prevenir overflow y centrar el contenido */
         body {
             background-color: #000;
             color: #0f0;
@@ -13,69 +14,90 @@
             flex-direction: column;
             align-items: center;
             margin: 0;
-            padding: 20px;
+            padding: 15px;
+            box-sizing: border-box;
+            overflow-x: hidden; /* Evita el scroll horizontal */
         }
+        
+        h1 {
+            font-size: 1.5rem;
+            text-align: center;
+        }
+
+        /* Contenedor fluido que se adapta al ancho de la pantalla */
+        #canvas-container {
+            width: 100%;
+            max-width: 800px; /* Tamaño máximo en PC */
+            display: flex;
+            justify-content: center;
+        }
+
         canvas {
             border: 1px solid #333;
             border-radius: 10px;
             box-shadow: 0 0 20px rgba(0, 255, 0, 0.2);
+            background-color: #000;
         }
+
         #data {
             margin-top: 15px;
             font-size: 1.2rem;
+            text-align: center;
         }
     </style>
 </head>
 <body>
 
     <h1>Radar Ultrasónico Wi-Fi</h1>
-    <canvas id="radar" width="800" height="450"></canvas>
+    
+    <div id="canvas-container">
+        <canvas id="radar"></canvas>
+    </div>
+    
     <div id="data">Esperando datos...</div>
 
     <script>
         const canvas = document.getElementById('radar');
         const ctx = canvas.getContext('2d');
         const dataDiv = document.getElementById('data');
+        const container = document.getElementById('canvas-container');
 
-        // Configuraciones del radar
-        const centerX = canvas.width / 2;
-        const centerY = canvas.height - 20; // Origen en la parte inferior centro
-        const maxRadius = 400; 
-        const maxDistance = 40; // Distancia máxima en cm
+        // Variables dinámicas para el renderizado
+        let centerX, centerY, maxRadius;
+        const maxDistance = 40; 
 
-        // Variables de estado
         let currentAngle = 90;
         let currentDistance = 0;
 
-        // 1. CONEXIÓN WEBSOCKET (Aquí te conectas al ESP)
-        // const gateway = `ws://${window.location.hostname}/ws`;
-        // const websocket = new WebSocket(gateway);
-        
-        // websocket.onmessage = function(event) {
-        //     const data = JSON.parse(event.data);
-        //     currentAngle = data.angle;
-        //     currentDistance = data.distance;
-        //     updateUI();
-        // };
+        // --- SISTEMA RESPONSIVE ---
+        function resizeCanvas() {
+            // El canvas toma el 100% del ancho de su contenedor
+            canvas.width = container.clientWidth;
+            // Mantenemos una proporción (aspect ratio) de 2:1 para el semicírculo
+            canvas.height = canvas.width / 2 + 20; // +20px para margen inferior
 
-        // 2. FUNCIÓN DE DIBUJO (Motor de renderizado)
+            // Recalcular el centro y el radio basados en la nueva resolución
+            centerX = canvas.width / 2;
+            centerY = canvas.height - 10;
+            maxRadius = canvas.width / 2 - 20; // -20px de margen lateral
+        }
+
+        // Ejecutar al cargar y cada vez que se gire o cambie el tamaño de la pantalla
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas(); 
+
+        // --- MOTOR DE RENDERIZADO ---
         function drawRadar() {
-            // Efecto de desvanecimiento "fósforo" (Dibuja un rectángulo negro semitransparente)
             ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Dibujar la grilla estática
             drawGrid();
-
-            // Dibujar la línea de escaneo
             drawScanner(currentAngle);
 
-            // Dibujar el objeto si está dentro del rango
             if (currentDistance > 0 && currentDistance <= maxDistance) {
                 drawObject(currentAngle, currentDistance);
             }
 
-            // Loop de animación
             requestAnimationFrame(drawRadar);
         }
 
@@ -83,14 +105,12 @@
             ctx.strokeStyle = 'rgba(0, 255, 0, 0.5)';
             ctx.lineWidth = 1;
 
-            // Arcos de distancia (10, 20, 30, 40 cm)
             for (let i = 1; i <= 4; i++) {
                 ctx.beginPath();
                 ctx.arc(centerX, centerY, (maxRadius / 4) * i, Math.PI, 0);
                 ctx.stroke();
             }
 
-            // Líneas de ángulo (30°, 60°, 90°, 120°, 150°)
             for (let angle = 30; angle <= 150; angle += 30) {
                 const radian = angle * (Math.PI / 180);
                 ctx.beginPath();
@@ -102,7 +122,7 @@
 
         function drawScanner(angle) {
             const radian = angle * (Math.PI / 180);
-            ctx.strokeStyle = '#0f0'; // Verde brillante
+            ctx.strokeStyle = '#0f0';
             ctx.lineWidth = 3;
             ctx.beginPath();
             ctx.moveTo(centerX, centerY);
@@ -112,39 +132,38 @@
 
         function drawObject(angle, distance) {
             const radian = angle * (Math.PI / 180);
-            // Mapear la distancia física a píxeles en el canvas
             const distanceInPixels = (distance / maxDistance) * maxRadius; 
             
             const x = centerX - distanceInPixels * Math.cos(radian);
             const y = centerY - distanceInPixels * Math.sin(radian);
 
-            ctx.fillStyle = '#f00'; // Rojo para el obstáculo
+            ctx.fillStyle = '#f00';
             ctx.beginPath();
-            ctx.arc(x, y, 6, 0, 2 * Math.PI);
+            // El tamaño del punto rojo también escala un poco según el tamaño de la pantalla
+            const dotSize = Math.max(3, canvas.width * 0.008); 
+            ctx.arc(x, y, dotSize, 0, 2 * Math.PI);
             ctx.fill();
         }
 
         function updateUI() {
             const status = currentDistance > maxDistance ? "Fuera de rango" : `${currentDistance} cm`;
-            dataDiv.innerText = `Ángulo: ${currentAngle}° | Distancia: ${status}`;
+            dataDiv.innerText = `Ángulo: ${currentAngle}° | Dist.: ${status}`;
         }
 
-        // Simulación para probar sin el ESP conectado
+        // --- SIMULACIÓN (Borrar al usar WebSocket) ---
         function simulateData() {
             let direction = 1;
             setInterval(() => {
                 currentAngle += direction * 2;
                 if (currentAngle >= 165 || currentAngle <= 15) direction *= -1;
                 
-                // Simular un obstáculo aleatorio
                 currentDistance = (Math.random() > 0.8) ? Math.floor(Math.random() * 50) : currentDistance;
                 updateUI();
             }, 50);
         }
 
-        // Iniciar todo
         drawRadar();
-        simulateData(); // Comentar esta línea cuando uses el WebSocket real
+        simulateData(); 
 
     </script>
 </body>
