@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Radar IoT ESP</title>
+    <style>
+        body {
+            background-color: #000;
+            color: #0f0;
+            font-family: monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0;
+            padding: 20px;
+        }
+        canvas {
+            border: 1px solid #333;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0, 255, 0, 0.2);
+        }
+        #data {
+            margin-top: 15px;
+            font-size: 1.2rem;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Radar Ultrasónico Wi-Fi</h1>
+    <canvas id="radar" width="800" height="450"></canvas>
+    <div id="data">Esperando datos...</div>
+
+    <script>
+        const canvas = document.getElementById('radar');
+        const ctx = canvas.getContext('2d');
+        const dataDiv = document.getElementById('data');
+
+        // Configuraciones del radar
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height - 20; // Origen en la parte inferior centro
+        const maxRadius = 400; 
+        const maxDistance = 40; // Distancia máxima en cm
+
+        // Variables de estado
+        let currentAngle = 90;
+        let currentDistance = 0;
+
+        // 1. CONEXIÓN WEBSOCKET (Aquí te conectas al ESP)
+        // const gateway = `ws://${window.location.hostname}/ws`;
+        // const websocket = new WebSocket(gateway);
+        
+        // websocket.onmessage = function(event) {
+        //     const data = JSON.parse(event.data);
+        //     currentAngle = data.angle;
+        //     currentDistance = data.distance;
+        //     updateUI();
+        // };
+
+        // 2. FUNCIÓN DE DIBUJO (Motor de renderizado)
+        function drawRadar() {
+            // Efecto de desvanecimiento "fósforo" (Dibuja un rectángulo negro semitransparente)
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Dibujar la grilla estática
+            drawGrid();
+
+            // Dibujar la línea de escaneo
+            drawScanner(currentAngle);
+
+            // Dibujar el objeto si está dentro del rango
+            if (currentDistance > 0 && currentDistance <= maxDistance) {
+                drawObject(currentAngle, currentDistance);
+            }
+
+            // Loop de animación
+            requestAnimationFrame(drawRadar);
+        }
+
+        function drawGrid() {
+            ctx.strokeStyle = 'rgba(0, 255, 0, 0.5)';
+            ctx.lineWidth = 1;
+
+            // Arcos de distancia (10, 20, 30, 40 cm)
+            for (let i = 1; i <= 4; i++) {
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, (maxRadius / 4) * i, Math.PI, 0);
+                ctx.stroke();
+            }
+
+            // Líneas de ángulo (30°, 60°, 90°, 120°, 150°)
+            for (let angle = 30; angle <= 150; angle += 30) {
+                const radian = angle * (Math.PI / 180);
+                ctx.beginPath();
+                ctx.moveTo(centerX, centerY);
+                ctx.lineTo(centerX - maxRadius * Math.cos(radian), centerY - maxRadius * Math.sin(radian));
+                ctx.stroke();
+            }
+        }
+
+        function drawScanner(angle) {
+            const radian = angle * (Math.PI / 180);
+            ctx.strokeStyle = '#0f0'; // Verde brillante
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(centerX, centerY);
+            ctx.lineTo(centerX - maxRadius * Math.cos(radian), centerY - maxRadius * Math.sin(radian));
+            ctx.stroke();
+        }
+
+        function drawObject(angle, distance) {
+            const radian = angle * (Math.PI / 180);
+            // Mapear la distancia física a píxeles en el canvas
+            const distanceInPixels = (distance / maxDistance) * maxRadius; 
+            
+            const x = centerX - distanceInPixels * Math.cos(radian);
+            const y = centerY - distanceInPixels * Math.sin(radian);
+
+            ctx.fillStyle = '#f00'; // Rojo para el obstáculo
+            ctx.beginPath();
+            ctx.arc(x, y, 6, 0, 2 * Math.PI);
+            ctx.fill();
+        }
+
+        function updateUI() {
+            const status = currentDistance > maxDistance ? "Fuera de rango" : `${currentDistance} cm`;
+            dataDiv.innerText = `Ángulo: ${currentAngle}° | Distancia: ${status}`;
+        }
+
+        // Simulación para probar sin el ESP conectado
+        function simulateData() {
+            let direction = 1;
+            setInterval(() => {
+                currentAngle += direction * 2;
+                if (currentAngle >= 165 || currentAngle <= 15) direction *= -1;
+                
+                // Simular un obstáculo aleatorio
+                currentDistance = (Math.random() > 0.8) ? Math.floor(Math.random() * 50) : currentDistance;
+                updateUI();
+            }, 50);
+        }
+
+        // Iniciar todo
+        drawRadar();
+        simulateData(); // Comentar esta línea cuando uses el WebSocket real
+
+    </script>
+</body>
+</html>
